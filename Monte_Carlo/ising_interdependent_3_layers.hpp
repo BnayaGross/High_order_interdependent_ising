@@ -20,9 +20,12 @@ public:
 	double q;    // fraction of interdependent nodes
 
 	Graph G1, G2, G3; // The networks
-	vector<bool> inter_connected12, inter_connected13, inter_connected23; //vector which states  the dependence of node to the other layers
+	vector<bool> inter_connected1, inter_connected2, inter_connected3; //vector which states  the dependence of node to the other layers
 	vector<int> spins1, spins2, spins3;  // The state of the spins in each network. [-1,1].
 	vector<double> local_m1, local_m2, local_m3;
+	
+	vector<double> local_m1_thermal_avg, local_m2_thermal_avg, local_m3_thermal_avg; //Used for thermal averaging
+	vector<double> local_m1_counter, local_m2_counter, local_m3_counter;
 
 	double M1, M2, M3;
 	double E1, E2, E3, E;
@@ -36,7 +39,7 @@ public:
 	void initialize_spins_ordered_up();
 	void initialize_spins_ordered_down();
 	void initializing_local_m();
-	void flip_spin(int spin, int net_idx);
+	void flip_spin(int spin, int net_idx, int step);
 	void revive_ordered_up();
 	void revive_ordered_down();
 	void revive_disordered();
@@ -51,10 +54,16 @@ ising_interdependent_3_layers::ising_interdependent_3_layers(double L_, int k_, 
 	G1.createGraphER(k); // Create ER network
 	giant1 = G1.testConnectivity(); 	
 	
+	for(double ii = 0; ii<3000000000; ii++) //pause  before creating another network
+		int dd = 5;
+	
 	
 	G2.setGraph(N); //same as G1
 	G2.createGraphER(k);
 	giant2 = G2.testConnectivity();
+	
+	for(double ii = 0; ii<3000000000; ii++) //pause  before creating another network
+		int dd = 5;
 	
 	G3.setGraph(N); //same as G1
 	G3.createGraphER(k);
@@ -85,18 +94,19 @@ ising_interdependent_3_layers::ising_interdependent_3_layers(double L_, int k_, 
 }
 
 void ising_interdependent_3_layers::create_interlinks(){
-	inter_connected12 = vector<bool>(N, 0); //create vector of size N full with zeroes
-	inter_connected13 = vector<bool>(N, 0); //create vector of size N full with zeroes
-	inter_connected23 = vector<bool>(N, 0); //create vector of size N full with zeroes
+	inter_connected1 = vector<bool>(N, 0); //create vector of size N full with zeroes
+	inter_connected3 = vector<bool>(N, 0); //create vector of size N full with zeroes
+	inter_connected2 = vector<bool>(N, 0); //create vector of size N full with zeroes
 
 	double rand_num;
 	for(int i=0;i<N;i++){ //for each node
-		inter_connected12[i] = 1;
+		
 	
 		rand_num = (double)G1.gen()/G1.gen.max(); 
 		if(rand_num < q){
-			inter_connected13[i] = 1;
-			inter_connected23[i] = 1;
+			inter_connected2[i] = 1;
+			inter_connected3[i] = 1;
+			inter_connected1[i] = 1;
 		}
 		
 			
@@ -242,61 +252,67 @@ void ising_interdependent_3_layers::initializing_local_m(){
 }
 
 
-void ising_interdependent_3_layers::flip_spin(int spin, int net_idx){
+void ising_interdependent_3_layers::flip_spin(int spin, int net_idx, int step){
 
-	if(net_idx == 1 and G1.connected[spin]){
+	if(net_idx == 1){
 		spins1[spin]*=-1;
 
 		for(int i=0;i<G1.v[spin].size();i++){
 			int j = G1.v[spin][i];
-			if(!G1.connected[j])
-				continue;
 			
 			double count = 0;
 			for(int jj = 0; jj < G1.v[j].size(); jj++)
-				if(G1.connected[G1.v[j][jj]])
 					count++;
 			
 			local_m1[j]+= (double)2*spins1[spin]/count;
+			
+			if(step > 10000000 and step%10000 == 0){
+				local_m1_thermal_avg[j] += local_m1[j];
+				local_m1_counter[j]++;
+			}
 
 			//E1 += -4*spins1[spin]*spins1[j];
 
 		}
 		M1+=2*spins1[spin];
 	}
-	else if(net_idx == 2 and G2.connected[spin]){
+	else if(net_idx == 2){
 		spins2[spin]*=-1;
 
 		for(int i=0;i<G2.v[spin].size();i++){
 			int j = G2.v[spin][i];
-			if(!G2.connected[j])
-				continue;
 			
 			double count = 0;
 			for(int jj = 0; jj < G2.v[j].size(); jj++)
-				if(G2.connected[G2.v[j][jj]])
 					count++;
 				
 			local_m2[j]+= (double)2*spins2[spin]/count;
+			
+			if(step > 10000000 and step%10000 == 0){
+				local_m2_thermal_avg[j] += local_m2[j];
+				local_m2_counter[j]++;
+			}
 			//E2 += -4*spins2[spin]*spins2[j];
 		}
 
 		M2+=2*spins2[spin];
 	}	
-	else if(net_idx == 3 and G3.connected[spin]){
+	else if(net_idx == 3){
 		spins3[spin]*=-1;
 
 		for(int i=0;i<G3.v[spin].size();i++){
 			int j = G3.v[spin][i];
-			if(!G3.connected[j])
-				continue;
 			
 			double count = 0;
 			for(int jj = 0; jj < G3.v[j].size(); jj++)
-				if(G3.connected[G3.v[j][jj]])
 					count++;
 				
 			local_m3[j]+= (double)2*spins3[spin]/count;
+			
+			if(step > 10000000 and step%10000 == 0){
+				local_m3_thermal_avg[j] += local_m3[j];
+				local_m3_counter[j]++;
+			}
 			//E2 += -4*spins2[spin]*spins2[j];
 		}
 
@@ -324,53 +340,47 @@ void ising_interdependent_3_layers::scan_T_high_order(double T_i,double T_f,doub
 				int ppi = G1.gen()%3;
 				if(ppi == 0){
 					u = G1.gen()%int(N);
-					
-					if(inter_connected12[u] and inter_connected13[u])
+
+					if(inter_connected1[u])
 						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*local_m3[u]*G1.v[u].size()));
-					else if(inter_connected12[u] and !inter_connected13[u])
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*G1.v[u].size()));
-					else if(!inter_connected12[u] and inter_connected13[u])
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m3[u]*G1.v[u].size()));
+						//pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(M2/N)*(M3/N)*G1.v[u].size()));
 					else
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*G1.v[u].size()));
+						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*G1.v[u].size()));
+						//pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(M2/N)*G1.v[u].size()));
 					
 					rand_num = (double)G1.gen()/G1.gen.max();
 					if(rand_num < pi){
-						flip_spin(u,1);
+						flip_spin(u,1,i);
 					}
 				}
 				else if (ppi == 1){
 					u = G2.gen()%int(N);
-					
-					if(inter_connected12[u] and inter_connected23[u])
+
+					if(inter_connected2[u])
 						pi = 1/(1+exp(+2*beta*spins2[u]*local_m1[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
-					else if(inter_connected12[u] and !inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m1[u]*local_m2[u]*G2.v[u].size()));
-					else if(!inter_connected12[u] and inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
+						//pi = 1/(1+exp(+2*beta*spins2[u]*(M1/N)*local_m2[u]*(M3/N)*G2.v[u].size()));
 					else
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*G2.v[u].size()));
+						pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
+						//pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*(M3/N)*G2.v[u].size()));
 					
 					rand_num = (double)G2.gen()/G2.gen.max();
 					if(rand_num < pi){
-						flip_spin(u,2);
+						flip_spin(u,2,i);
 					}
 				}
 				else if (ppi == 2){
 					u = G3.gen()%int(N);
-					
-					if(inter_connected13[u] and inter_connected23[u])
+
+					if(inter_connected3[u])
 						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m2[u]*local_m3[u]*G3.v[u].size()));
-					else if(inter_connected13[u] and !inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m3[u]*G3.v[u].size()));
-					else if(!inter_connected13[u] and inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m2[u]*local_m3[u]*G3.v[u].size()));
+						//pi = 1/(1+exp(+2*beta*spins3[u]*(M1/N)*(M2/N)*local_m3[u]*G3.v[u].size()));
 					else
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*G3.v[u].size()));
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*local_m1[u]*G3.v[u].size()));
+						//pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*(M1/N)*G3.v[u].size()));
 					
 					rand_num = (double)G3.gen()/G3.gen.max();
 					if(rand_num < pi){
-						flip_spin(u,3);
+						flip_spin(u,3,i);
 					}
 				}
 				
@@ -421,61 +431,156 @@ void ising_interdependent_3_layers::scan_T_thermal(double T_i,double T_f,double 
 			
 			//change the local magnetization to global magnetization to reduce fluctuations
 			
+			//local magnetization
 			for(int i=0;i<NOF;i++){
 		
 					u = G1.gen()%int(N);
-					
-					if(inter_connected12[u] and inter_connected13[u])
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*local_m3[u]*G1.v[u].size()));
-					else if(inter_connected12[u] and !inter_connected13[u])
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*G1.v[u].size()));
-					else if(!inter_connected12[u] and inter_connected13[u])
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m3[u]*G1.v[u].size()));
-					else
-						pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*G1.v[u].size()));
+
+					if(inter_connected1[u]){
+						if(local_m2_counter[u] != 0 and local_m3_counter[u] != 0)
+							pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(local_m2_thermal_avg[u]/local_m2_counter[u])*(local_m3_thermal_avg[u]/local_m3_counter[u])*G1.v[u].size()));
+						else if(local_m2_counter[u] != 0 and local_m3_counter[u] == 0)
+							pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(local_m2_thermal_avg[u]/local_m2_counter[u])*local_m3[u]*G1.v[u].size()));
+						else if(local_m2_counter[u] == 0 and local_m3_counter[u] != 0)
+							pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*(local_m3_thermal_avg[u]/local_m3_counter[u])*G1.v[u].size()));
+						else
+							pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*local_m3[u]*G1.v[u].size()));
+					}
+					else{
+						if(local_m2_counter[u] != 0)
+							pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(local_m2_thermal_avg[u]/local_m2_counter[u])*G1.v[u].size()));
+						else
+							pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*local_m2[u]*G1.v[u].size()));
+					}
+
 					
 					rand_num = (double)G1.gen()/G1.gen.max();
 					if(rand_num < pi){
-						flip_spin(u,1);
+						flip_spin(u,1,i);
 					}
+					
+			}
+			
+			for(int i = 0;i < N; i++){
+				local_m2_thermal_avg[i] = 0;
+				local_m2_counter[i] = 0;
+			}
+			
+			for(int i=0;i<NOF;i++){
+				
+					u = G2.gen()%int(N);
+
+					if(inter_connected2[u]){
+						if(local_m1_counter[u] != 0 and local_m3_counter[u] != 0)
+							pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*(local_m1_thermal_avg[u]/local_m1_counter[u])*(local_m3_thermal_avg[u]/local_m3_counter[u])*G2.v[u].size()));
+						else if(local_m1_counter[u] != 0 and local_m3_counter[u] == 0)
+							pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*(local_m1_thermal_avg[u]/local_m1_counter[u])*local_m3[u]*G2.v[u].size()));
+						else if(local_m1_counter[u] == 0 and local_m3_counter[u] != 0)
+							pi = 1/(1+exp(+2*beta*spins2[u]*local_m1[u]*local_m2[u]*(local_m3_thermal_avg[u]/local_m3_counter[u])*G2.v[u].size()));
+						else
+							pi = 1/(1+exp(+2*beta*spins2[u]*local_m1[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
+					}
+					else{
+						if(local_m3_counter[u] != 0)
+							pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*(local_m3_thermal_avg[u]/local_m3_counter[u])*G2.v[u].size()));
+						else
+							pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
+					}
+
+					
+					
+					rand_num = (double)G2.gen()/G2.gen.max();
+					if(rand_num < pi){
+						flip_spin(u,2,i);
+					}
+				}
+				
+			for(int i = 0;i < N; i++){
+				local_m3_thermal_avg[i] = 0;
+				local_m3_counter[i] = 0;
+			}
+			
+			for(int i=0;i<NOF;i++){
+				
+				u = G3.gen()%int(N);
+
+				if(inter_connected3[u]){
+					if(local_m1_counter[u] != 0 and local_m2_counter[u] != 0)
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*(local_m1_thermal_avg[u]/local_m1_counter[u])*(local_m2_thermal_avg[u]/local_m2_counter[u])*G3.v[u].size()));
+					else if(local_m1_counter[u] != 0 and local_m2_counter[u] == 0)
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*(local_m1_thermal_avg[u]/local_m1_counter[u])*local_m2[u]*G3.v[u].size()));
+					else if(local_m1_counter[u] == 0 and local_m2_counter[u] != 0)
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m3[u]*(local_m2_thermal_avg[u]/local_m2_counter[u])*G3.v[u].size()));
+					else
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m2[u]*local_m3[u]*G3.v[u].size()));
+				}
+				else{
+					if(local_m1_counter[u] != 0)
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*(local_m1_thermal_avg[u]/local_m1_counter[u])*G3.v[u].size()));
+					else
+						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m3[u]*G3.v[u].size()));
+				}
+
+				
+				rand_num = (double)G3.gen()/G3.gen.max();
+				if(rand_num < pi){
+					flip_spin(u,3,i);
+				}
+			}
+			
+			for(int i = 0;i < N; i++){
+				local_m1_thermal_avg[i] = 0;
+				local_m1_counter[i] = 0;
+			}
+				
+				
+			//global magnetization
+			/*for(int i=0;i<NOF;i++){
+	
+				u = G1.gen()%int(N);
+				
+				if(inter_connected1[u])
+					pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(M2/N)*(M3/N)*G1.v[u].size()));
+				else
+					pi = 1/(1+exp(+2*beta*spins1[u]*local_m1[u]*(M2/N)*G1.v[u].size()));
+		
+				
+				rand_num = (double)G1.gen()/G1.gen.max();
+				if(rand_num < pi){
+					flip_spin(u,1,i);
+				}
 					
 			}
 			for(int i=0;i<NOF;i++){
 				
-					u = G2.gen()%int(N);
-					
-					if(inter_connected12[u] and inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m1[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
-					else if(inter_connected12[u] and !inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m1[u]*local_m2[u]*G2.v[u].size()));
-					else if(!inter_connected12[u] and inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*local_m3[u]*G2.v[u].size()));
-					else
-						pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*G2.v[u].size()));
-					
-					rand_num = (double)G2.gen()/G2.gen.max();
-					if(rand_num < pi){
-						flip_spin(u,2);
-					}
+				u = G2.gen()%int(N);
+				
+				if(inter_connected2[u])
+					pi = 1/(1+exp(+2*beta*spins2[u]*(M1/N)*local_m2[u]*(M3/N)*G2.v[u].size()));
+				else
+					pi = 1/(1+exp(+2*beta*spins2[u]*local_m2[u]*(M3/N)*G2.v[u].size()));
+
+				
+				rand_num = (double)G2.gen()/G2.gen.max();
+				if(rand_num < pi){
+					flip_spin(u,2,i);
 				}
-				for(int i=0;i<NOF;i++){
-					
-					u = G3.gen()%int(N);
-					
-					if(inter_connected13[u] and inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m2[u]*local_m3[u]*G3.v[u].size()));
-					else if(inter_connected13[u] and !inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m1[u]*local_m3[u]*G3.v[u].size()));
-					else if(!inter_connected13[u] and inter_connected23[u])
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m2[u]*local_m3[u]*G3.v[u].size()));
-					else
-						pi = 1/(1+exp(+2*beta*spins3[u]*local_m3[u]*G3.v[u].size()));
-					
-					rand_num = (double)G3.gen()/G3.gen.max();
-					if(rand_num < pi){
-						flip_spin(u,3);
-					}
+			}
+			for(int i=0;i<NOF;i++){
+				
+				u = G3.gen()%int(N);
+				
+				if(inter_connected3[u])
+					pi = 1/(1+exp(+2*beta*spins3[u]*(M1/N)*(M2/N)*local_m3[u]*G3.v[u].size()));
+				else
+					pi = 1/(1+exp(+2*beta*spins3[u]*(M1/N)*local_m3[u]*G3.v[u].size()));
+
+				
+				rand_num = (double)G3.gen()/G3.gen.max();
+				if(rand_num < pi){
+					flip_spin(u,3,i);
 				}
+			}*/
 			}
 		
 		calc_energy();
@@ -509,22 +614,22 @@ void ising_interdependent_3_layers::scan_T_thermal(double T_i,double T_f,double 
 void ising_interdependent_3_layers::revive_ordered_up(){
 	for(int i=0;i<N;i++){    //flip all the spins back up
 		if(spins1[i] == -1)
-			flip_spin(i,1);
+			flip_spin(i,1,i);
 		if(spins2[i] == -1)
-			flip_spin(i,2);
+			flip_spin(i,2,i);
 		if(spins3[i] == -1)
-			flip_spin(i,3);
+			flip_spin(i,3,i);
 	}
 }
 
 void ising_interdependent_3_layers::revive_ordered_down(){
 	for(int i=0;i<N;i++){    //flip all the spins back up
 		if(spins1[i] == 1)
-			flip_spin(i,1);
+			flip_spin(i,1,i);
 		if(spins2[i] == 1)
-			flip_spin(i,2);
+			flip_spin(i,2,i);
 		if(spins2[i] == 1)
-			flip_spin(i,3);
+			flip_spin(i,3,i);
 	}
 }
 
@@ -534,21 +639,21 @@ void ising_interdependent_3_layers::revive_disordered(){
 	for(int i=0;i<N;i++){ //network1
 		rand_num = (double)G1.gen()/G1.gen.max();
 		if(rand_num < 0.5){
-			flip_spin(i,1);
+			flip_spin(i,1,i);
 		}
 	}
 
 	for(int i=0;i<N;i++){ //network2
 		rand_num = (double)G1.gen()/G1.gen.max();
 		if(rand_num < 0.5){
-			flip_spin(i,2);
+			flip_spin(i,2,i);
 		}
 	}
 	
 	for(int i=0;i<N;i++){ //network3
 		rand_num = (double)G1.gen()/G1.gen.max();
 		if(rand_num < 0.5){
-			flip_spin(i,3);
+			flip_spin(i,3,i);
 		}
 	}
 }
