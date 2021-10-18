@@ -50,6 +50,8 @@ ising_interdependent_2_layers::ising_interdependent_2_layers(double L_, int k_, 
 	G1.createGraphER(k); // Create ER network
 	giant1 = G1.testConnectivity(); 	
 	
+	for(double ii = 0; ii<3000000000; ii++) //pause  before creating another network
+		int dd = 5;
 	
 	G2.setGraph(N); //same as G1
 	G2.createGraphER(k);
